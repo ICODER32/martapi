@@ -6,13 +6,24 @@ services:
       context: ./product_service
       dockerfile: Dockerfile
     volumes:
-      - ./product_service:/code/
+      - ./product_service:/app/
     depends_on:
       - kafka-ui
       - broker
     ports:
       - "8000:8000"
-
+  product_db_serice:
+    build:
+      context: ./product_db_service
+      dockerfile: Dockerfile
+    volumes:
+      - ./product_db_service:/app/
+    depends_on:
+      - PG_CONTAINER
+      - broker
+    ports:
+      - "8001:8000"
+    
   PG_CONTAINER:
     image: postgres:latest
     container_name: pg_container

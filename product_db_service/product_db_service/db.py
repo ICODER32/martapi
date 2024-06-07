@@ -1,0 +1,21 @@
+from sqlmodel import SQLModel, create_engine, Session, select,Field
+
+pgsql_url = "postgresql://IBTISAM:IBTISAM@pg_container:5432/ibtisam_martapi"
+
+engine=create_engine(pgsql_url)
+
+
+class Product(SQLModel, table=True):
+    id: int = Field(default=None, primary_key=True)
+    name: str
+    description: str
+    category: str
+    price: float
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+    print("Database and tables created")
+
+def get_session():
+    with Session(engine) as session:
+        yield session
