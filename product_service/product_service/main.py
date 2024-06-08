@@ -1,15 +1,15 @@
 import asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI,Depends
 from contextlib import asynccontextmanager
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka import AIOKafkaProducer
-from product_service.consumer import consume
 import product_pb2
 from pydantic import BaseModel
 import asyncio
+from typing import Annotated
 from aiokafka.errors import TopicAlreadyExistsError, KafkaConnectionError
 
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 RETRY_INTERVAL = 10  # seconds
 
 async def create_kafka_topic():
@@ -39,15 +39,18 @@ async def create_kafka_topic():
     
     raise Exception("Failed to connect to Kafka broker after several retries")
 
+
+async def get_kafka_producer():
+        producer = AIOKafkaProducer(bootstrap_servers="broker:19092")
+        await producer.start()
+        try:
+            yield producer
+        finally:
+            await producer.stop()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_kafka_topic()
-    # run consume in infinite loop
-    loop=asyncio.get_event_loop()
-    consume_task=loop.create_task(consume())
     yield
-    consume_task.cancel()
-    await consume_task
 
 
 app = FastAPI(lifespan=lifespan)
@@ -57,24 +60,20 @@ class Product(BaseModel):
     name: str
     description: str
     price: float
-    quantity: int
+    category: str
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
 
 @app.post("/products/")
-async def create_product(product:Product):
+async def create_product(product:Product,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
     product_message = product_pb2.Product()
     product_message.name = product.name
     product_message.description = product.description
     product_message.price = product.price
-    product_message.stock = product.quantity
-
-    product_message = product_message.SerializeToString()
-
-
-    producer=AIOKafkaProducer(bootstrap_servers="broker:19092")
-    await producer.start()
-    await producer.send_and_wait("products", product_message)
+    product_message.category = product.category
+    await producer.send_and_wait("products", product_message.SerializeToString())
     return {"product": "created"}
+
+    
 

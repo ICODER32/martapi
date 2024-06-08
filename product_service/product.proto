@@ -3,6 +3,7 @@ syntax="proto3";
 message Product{
     string name = 1;
     string description = 2;
-    float price = 3;
-    int32 stock = 4;
+    string category = 3;
+    float price = 4;
 }
+

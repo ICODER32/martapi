@@ -8,6 +8,8 @@ from aiokafka.errors import KafkaConnectionError
 from product_db_service import product_pb2
 import asyncio
 
+MAX_RETRIES = 3
+RETRY_INTERVAL = 10  # seconds
 
 async def consume():
     consumer = AIOKafkaConsumer(
@@ -15,26 +17,36 @@ async def consume():
         bootstrap_servers="broker:19092",
         group_id="product_service",
     )
-    try:
-        await consumer.start()
-        async for msg in consumer:
-            if msg.value is not None:
-                product = product_pb2.Product()
-                product.ParseFromString(msg.value)
-                print(product)
-    finally:
-        await consumer.stop()
     
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            print("Attempting to connect to Kafka broker...")
+            await consumer.start()
+            print("Connected to Kafka broker")
+            async for msg in consumer:
+                if msg.value is not None:
+                    print(f"Consumed message: {msg}")
+            break
+        except KafkaConnectionError:
+            retries += 1
+            print(f"Kafka connection failed, retrying {retries}/{MAX_RETRIES}...")
+            await asyncio.sleep(RETRY_INTERVAL)
+        finally:
+            await consumer.stop()
+    
+    if retries == MAX_RETRIES:
+        raise Exception("Failed to connect to Kafka broker after several retries")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
-    loop=asyncio.get_event_loop()
-    consume_task=loop.create_task(consume())
+    loop = asyncio.get_event_loop()
+    consume_task = loop.create_task(consume())
     yield
     consume_task.cancel()
     await consume_task
-    
+
 app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
@@ -42,7 +54,7 @@ async def read_root():
     return {"service": "product db service"}
 
 @app.post("/addProduct")
-async def addProduct(product: Product, sess=Depends(get_session)):
+async def add_product_endpoint(product: Product, sess=Depends(get_session)):
     sess.add(product)
     sess.commit()
     sess.refresh(product)
