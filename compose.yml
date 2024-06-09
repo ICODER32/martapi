@@ -23,7 +23,7 @@ services:
       - broker
     ports:
       - "8001:8000"
-    
+
   PG_CONTAINER:
     image: postgres:latest
     container_name: pg_container
@@ -61,8 +61,6 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
-    extra_hosts:
-      - "broker:127.0.0.1"
 
   kafka-ui:
     image: provectuslabs/kafka-ui

@@ -7,10 +7,10 @@ engine=create_engine(pgsql_url)
 
 class Product(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
-    name: str
-    description: str
-    category: str
-    price: float
+    name: str=Field()
+    description: str=Field()
+    category: str=Field()
+    price: float=Field()
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
