@@ -15,36 +15,55 @@ logger = logging.getLogger(__name__)
 
 async def consume():
     consumer = AIOKafkaConsumer(
-        "products",
-        bootstrap_servers="broker:19092",
-        group_id="product_db_service",
-        auto_offset_reset="earliest"
+        'products',
+        bootstrap_servers='broker:19092',
+        group_id='product-group'
     )
     await consumer.start()
     try:
         async for msg in consumer:
-            try:
-                product = product_pb2.Product()
-                product.ParseFromString(msg.value)
-                with Session(engine) as sess:
-                    sess.add(Product(
+            product = product_pb2.Product()
+            product.ParseFromString(msg.value)
+            logger.info(f"Received message: {product}")
+            with Session(engine) as sess:
+                if product.operation == product_pb2.OperationType.CREATE:
+                    new_product = Product(
+                        id=product.id,
                         name=product.name,
                         description=product.description,
                         category=product.category,
                         price=product.price
-                    ))
+                    )
+                    sess.add(new_product)
                     sess.commit()
-                    sess.refresh(product)
-                    logger.info(f"Product added to database: {product}")
-            except Exception as e:
-                logger.error(f"Error processing message: {e}")
-    except KafkaError as e:
-        logger.error(f"Kafka error: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+                    sess.refresh(new_product)
+                    logger.info(f"Product added to database: {new_product}")
+
+                elif product.operation == product_pb2.OperationType.UPDATE:
+                    existing_product = sess.query(Product).filter_by(id=product.id).first()
+                    if existing_product:
+                        existing_product.name = product.name
+                        existing_product.description = product.description
+                        existing_product.category = product.category
+                        existing_product.price = product.price
+                        sess.commit()
+                        sess.refresh(existing_product)
+                        logger.info(f"Product updated in database: {existing_product}")
+                    else:
+                        logger.warning(f"Product with ID {product.id} not found for update")
+
+                elif product.operation == product_pb2.OperationType.DELETE:
+                    existing_product = sess.query(Product).filter_by(id=product.id).first()
+                    if existing_product:
+                        sess.delete(existing_product)
+                        sess.commit()
+                        logger.info(f"Product deleted from database: {existing_product}")
+                    else:
+                        logger.warning(f"Product with ID {product.id} not found for deletion")
+                else:
+                    logger.warning(f"Unknown operation type: {product.operation}")
     finally:
         await consumer.stop()
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()

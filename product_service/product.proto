@@ -1,9 +1,16 @@
-syntax="proto3";
+syntax = "proto3";
 
-message Product{
-    string name = 1;
-    string description = 2;
-    string category = 3;
-    float price = 4;
+enum OperationType {
+    CREATE = 0;
+    UPDATE = 1;
+    DELETE = 2;
 }
 
+message Product {
+    optional int32 id = 1;
+    optional string name = 2;
+    optional string description = 3;
+    optional string category = 4;
+    optional float price = 5;
+    optional OperationType operation = 6;
+}

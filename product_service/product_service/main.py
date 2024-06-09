@@ -61,6 +61,9 @@ class Product(BaseModel):
     description: str
     price: float
     category: str
+
+class ProductUpdate(Product):
+    id: int
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
@@ -72,8 +75,31 @@ async def create_product(product:Product,producer: Annotated[AIOKafkaProducer,De
     product_message.description = product.description
     product_message.price = product.price
     product_message.category = product.category
+    product_message.operation = product_pb2.OperationType.CREATE
+
     await producer.send_and_wait("products", product_message.SerializeToString())
     return {"product": "created"}
 
-    
+@app.delete("/products/")
+async def delete_product(product_id: str, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+    product_message = product_pb2.Product()
+    # convert the product_id to int
+    product_message.id = int(product_id)
+    product_message.operation = product_pb2.OperationType.DELETE
+    await producer.send_and_wait("products", product_message.SerializeToString())
+    return {"product": "deleted"}
+
+
+@app.put("/products/")
+async def update_product(product: ProductUpdate, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+    product_message = product_pb2.Product()
+    product_message.id = product.id
+    product_message.name = product.name
+    product_message.description = product.description
+    product_message.price = product.price
+    product_message.category = product.category
+    product_message.operation = product_pb2.OperationType.UPDATE
+
+    await producer.send_and_wait("products", product_message.SerializeToString())
+    return {"product": "updated"}
 
