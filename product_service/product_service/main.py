@@ -69,15 +69,22 @@ def read_root():
     return {"Hello": "World"}
 
 @app.post("/products/")
-async def create_product(product:Product,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
+async def create_product(product:Product
+                         ,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
+
     product_message = product_pb2.Product()
+
     product_message.name = product.name
     product_message.description = product.description
     product_message.price = product.price
     product_message.category = product.category
+
     product_message.operation = product_pb2.OperationType.CREATE
 
-    await producer.send_and_wait("products", product_message.SerializeToString())
+    await producer.send_and_wait(
+        "products", # topic name
+         product_message.serializeToString()
+          )
     return {"product": "created"}
 
 @app.delete("/products/")

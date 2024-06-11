@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 async def consume():
     consumer = AIOKafkaConsumer(
-        'products',
-        bootstrap_servers='broker:19092',
+        'products', #topic name
+        bootstrap_servers='broker:19092', #kafka broker
         group_id='product-group'
     )
     await consumer.start()
@@ -25,6 +25,7 @@ async def consume():
             product = product_pb2.Product()
             product.ParseFromString(msg.value)
             logger.info(f"Received message: {product}")
+            
             with Session(engine) as sess:
                 if product.operation == product_pb2.OperationType.CREATE:
                     new_product = Product(
@@ -64,6 +65,8 @@ async def consume():
                     logger.warning(f"Unknown operation type: {product.operation}")
     finally:
         await consumer.stop()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
@@ -74,14 +77,3 @@ async def lifespan(app: FastAPI):
     await consume_task
 
 app = FastAPI(lifespan=lifespan)
-
-@app.get("/")
-async def read_root():
-    return {"service": "product db service"}
-
-@app.post("/addProduct")
-async def add_product_endpoint(product: Product, sess=Depends(get_session)):
-    sess.add(product)
-    sess.commit()
-    sess.refresh(product)
-    return product
