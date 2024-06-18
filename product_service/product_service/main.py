@@ -57,6 +57,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 class Product(BaseModel):
+    id:int
     name: str
     description: str
     price: float
@@ -73,7 +74,7 @@ async def create_product(product:Product
                          ,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
 
     product_message = product_pb2.Product()
-
+    product_message.id = product.id
     product_message.name = product.name
     product_message.description = product.description
     product_message.price = product.price
@@ -83,7 +84,7 @@ async def create_product(product:Product
 
     await producer.send_and_wait(
         "products", # topic name
-         product_message.serializeToString()
+         product_message.SerializeToString()
           )
     return {"product": "created"}
 

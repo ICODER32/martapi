@@ -6,7 +6,7 @@ engine=create_engine(pgsql_url)
 
 
 class Product(SQLModel, table=True):
-    id: int = Field(default=None, primary_key=True)
+    id: str = Field(default=None, primary_key=True)
     name: str=Field()
     description: str=Field()
     category: str=Field()

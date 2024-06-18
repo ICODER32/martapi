@@ -12,6 +12,7 @@ services:
       - broker
     ports:
       - "8000:8000"
+
   product_db_serice:
     build:
       context: ./product_db_service
