@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+enum InventoryOpType {
+    InvCREATE = 0;
+    InvUPDATE = 1;
+    InvDELETE = 2;
+}
+
+message Inventory {
+    optional string product_id=1;
+    optional string name = 2;
+    optional string description = 3;
+    optional string category = 4;
+    optional float price = 5;
+    optional InventoryOpType operation = 6;
+}

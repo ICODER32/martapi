@@ -2,15 +2,23 @@ import asyncio
 from fastapi import FastAPI,Depends
 from contextlib import asynccontextmanager
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
-from aiokafka import AIOKafkaProducer
+from aiokafka import AIOKafkaProducer,AIOKafkaConsumer
 import product_pb2
-from pydantic import BaseModel
+import inventory_pb2
 import asyncio
 from typing import Annotated
-from aiokafka.errors import TopicAlreadyExistsError, KafkaConnectionError
-
+from aiokafka.errors import TopicAlreadyExistsError, KafkaConnectionError,KafkaError
+from sqlmodel import Session
 MAX_RETRIES = 5
+import uuid
 RETRY_INTERVAL = 10  # seconds
+
+from product_service.db import Product,create_db_and_tables,engine,ProductSchema
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+from sqlmodel import select
 
 async def create_kafka_topic():
     """ Function to create kafka topic """
@@ -39,7 +47,6 @@ async def create_kafka_topic():
     
     raise Exception("Failed to connect to Kafka broker after several retries")
 
-
 async def get_kafka_producer():
         producer = AIOKafkaProducer(bootstrap_servers="broker:19092")
         await producer.start()
@@ -47,39 +54,126 @@ async def get_kafka_producer():
             yield producer
         finally:
             await producer.stop()
+async def consume():
+    consumer = AIOKafkaConsumer(
+        'products',  # topic name
+        bootstrap_servers='broker:19092',  # kafka broker
+        group_id='products-group'
+    )
+    while True:
+        try:
+            await consumer.start()
+            break
+        except KafkaConnectionError as e:
+            logger.error(f"Kafka connection error: {e}")
+            await asyncio.sleep(5)
+    try:
+        async for msg in consumer:
+            new_product = product_pb2.Product()
+            new_product.ParseFromString(msg.value)
+            logger.info(f"Consumed message: {new_product}")
+            if new_product.operation == product_pb2.OperationType.CREATE:
+                product_id = str(uuid.uuid4())
+                with Session(engine) as session:
+                    isAlreadyExists = session.exec(select(Product).where(Product.name == new_product.name
+                                                                         , Product.description == new_product.description
+                                                                            , Product.price == new_product.price
+                                                                            , Product.category == new_product.category
+                                                                         )).first()
+                    if isAlreadyExists:
+                        logger.info("Product already exists")
+                        inventory_message=inventory_pb2.Inventory()
+                        inventory_message.product_id = isAlreadyExists.product_id
+                        inventory_message.name = isAlreadyExists.name
+                        inventory_message.description = isAlreadyExists.description
+                        inventory_message.price = isAlreadyExists.price
+                        inventory_message.category = isAlreadyExists.category
+                        inventory_message.operation = inventory_pb2.InventoryOpType.InvCREATE 
+                    else:
+                        product = Product(
+                            product_id=product_id,
+                            name=new_product.name,
+                            description=new_product.description,
+                            price=new_product.price,
+                            category=new_product.category
+                        )
+                        session.add(product)
+                        session.commit()
+                        inventory_message=inventory_pb2.Inventory()
+                        inventory_message.product_id = product_id
+                        inventory_message.name = new_product.name
+                        inventory_message.description = new_product.description
+                        inventory_message.price = new_product.price
+                        inventory_message.category = new_product.category
+                        inventory_message.operation = inventory_pb2.InventoryOpType.InvCREATE
+
+
+                    try:
+                        producer = AIOKafkaProducer(bootstrap_servers="broker:19092")
+                        await producer.start()
+                        await producer.send_and_wait("inventory", inventory_message.SerializeToString())
+                    finally:
+                        await producer.stop()
+                   
+
+
+
+            elif new_product.operation == product_pb2.OperationType.DELETE:
+                with Session(engine) as session:
+                    product = session.exec(select(Product).where(Product.id == new_product.id)).first()
+                    session.delete(product)
+                    session.commit()
+            elif new_product.operation == product_pb2.OperationType.UPDATE:
+                with Session(engine) as session:
+                    product = session.exec(select(Product).where(Product.id == new_product.id)).first()
+                    product.name = new_product.name
+                    product.description = new_product.description
+                    product.price = new_product.price
+                    product.category = new_product.category
+                    session.commit()
+
+
+    except KafkaError as e:
+        logger.error(f"Error while consuming message: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    create_db_and_tables()
     await create_kafka_topic()
+    loop = asyncio.get_event_loop()
+    loop.create_task(consume())
     yield
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
 
 
 app = FastAPI(lifespan=lifespan)
 
 
-class Product(BaseModel):
-    id:int
-    name: str
-    description: str
-    price: float
-    category: str
-
 class ProductUpdate(Product):
     id: int
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def read_root(session:Session=Depends(get_session)):
+    products=session.exec(select(Product)).all()
+    return {
+        "products": products
+    }
+    
 
 @app.post("/products/")
-async def create_product(product:Product
+async def create_product(product:ProductSchema
                          ,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
 
     product_message = product_pb2.Product()
-    product_message.id = product.id
     product_message.name = product.name
     product_message.description = product.description
     product_message.price = product.price
     product_message.category = product.category
-
     product_message.operation = product_pb2.OperationType.CREATE
 
     await producer.send_and_wait(
@@ -99,9 +193,9 @@ async def delete_product(product_id: str, producer: Annotated[AIOKafkaProducer, 
 
 
 @app.put("/products/")
-async def update_product(product: ProductUpdate, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+async def update_product(product_id:int, product: ProductSchema, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
     product_message = product_pb2.Product()
-    product_message.id = product.id
+    product_message.id = product_id
     product_message.name = product.name
     product_message.description = product.description
     product_message.price = product.price

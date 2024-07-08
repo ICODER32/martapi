@@ -13,18 +13,32 @@ services:
     ports:
       - "8000:8000"
 
-  product_db_serice:
+  order_service:
     build:
-      context: ./product_db_service
+      context: ./order_service
       dockerfile: Dockerfile
     volumes:
-      - ./product_db_service:/app/
+      - ./order_service:/app/
     depends_on:
-      - PG_CONTAINER
+      - kafka-ui
+      - broker
+    ports:
+      - "8002:8000"
+  
+  inventory_service:
+    build:
+      context: ./inventory_service
+      dockerfile: Dockerfile
+    container_name: inventory_service
+    hostname: inventory_service
+    volumes:
+      - ./inventory_service:/app/
+    depends_on:
+      - kafka-ui
       - broker
     ports:
       - "8001:8000"
-
+  
   PG_CONTAINER:
     image: postgres:latest
     container_name: pg_container
