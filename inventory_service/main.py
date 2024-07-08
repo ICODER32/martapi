@@ -56,7 +56,32 @@ async def consume():
                         session.commit()
                         logger.info("Product added to inventory")
             
-        
+            if inventory.operation == inventory_pb2.InventoryOpType.InvDELETE:
+                with Session(engine) as session:
+                    product = session.exec(select(Inventory).where(Inventory.product_id == inventory.product_id)).first()
+                    if product:
+                        #  DELETE THE PRODUCT   
+                        session.delete(product)
+                        session.commit()
+                        logger.info("Product deleted from inventory")
+                        
+                    else:
+                        logger.info("Product not found in inventory")
+
+            if inventory.operation == inventory_pb2.InventoryOpType.InvUPDATE:
+                with Session(engine) as session:
+                    product = session.exec(select(Inventory).where(Inventory.product_id == inventory.product_id)).first()
+                    if product:
+                        #  UPDATE THE PRODUCT   
+                        product.name = inventory.name
+                        product.description = inventory.description
+                        product.price = inventory.price
+                        product.category = inventory.category
+                        session.add(product)
+                        session.commit()
+                        logger.info("Product updated in inventory")
+                    else:
+                        logger.info("Product not found in inventory")
 
     except KafkaError as e:
         logger.error(f"Kafka error: {e}")

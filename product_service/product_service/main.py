@@ -123,6 +123,15 @@ async def consume():
                     product = session.exec(select(Product).where(Product.id == new_product.id)).first()
                     session.delete(product)
                     session.commit()
+                    inventory_message = inventory_pb2.Inventory()
+                    inventory_message.product_id = product.product_id
+                    inventory_message.operation = inventory_pb2.InventoryOpType.InvDELETE
+                    try:
+                        producer = AIOKafkaProducer(bootstrap_servers="broker:19092")
+                        await producer.start()
+                        await producer.send_and_wait("inventory", inventory_message.SerializeToString())
+                    finally:
+                        await producer.stop()
             elif new_product.operation == product_pb2.OperationType.UPDATE:
                 with Session(engine) as session:
                     product = session.exec(select(Product).where(Product.id == new_product.id)).first()
@@ -131,6 +140,20 @@ async def consume():
                     product.price = new_product.price
                     product.category = new_product.category
                     session.commit()
+                    inventory_message = inventory_pb2.Inventory()
+                    inventory_message.product_id = product.product_id
+                    inventory_message.name = product.name
+                    inventory_message.description = product.description
+                    inventory_message.price = product.price
+                    inventory_message.category = product.category
+                    inventory_message.operation = inventory_pb2.InventoryOpType.InvUPDATE
+                    try:
+                        producer = AIOKafkaProducer(bootstrap_servers="broker:19092")
+                        await producer.start()
+                        await producer.send_and_wait("inventory", inventory_message.SerializeToString())
+                    finally:
+                        await producer.stop()
+                        
 
 
     except KafkaError as e:
