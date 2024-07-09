@@ -84,6 +84,7 @@ async def consume():
                         logger.info("Product already exists")
                         inventory_message=inventory_pb2.Inventory()
                         inventory_message.product_id = isAlreadyExists.product_id
+                        logger.info(isAlreadyExists.product_id)
                         inventory_message.name = isAlreadyExists.name
                         inventory_message.description = isAlreadyExists.description
                         inventory_message.price = isAlreadyExists.price

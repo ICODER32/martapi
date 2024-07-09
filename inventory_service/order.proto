@@ -7,7 +7,7 @@ enum OrderOp {
 }
 
 message Order {
-  optional string product_id = 1;
+  optional int32 product_id = 1;
   optional int32 quantity = 2;
   optional float price = 3;
   optional OrderOp operation = 4;
