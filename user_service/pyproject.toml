@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "user-service"
+version = "0.1.0"
+description = ""
+authors = ["Ibtisam Anwar <ibtisamanwar008@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.30.1"}
+aiokafka = "^0.10.0"
+protobuf = "^5.27.2"
+sqlmodel = "^0.0.19"
+psycopg2-binary = "^2.9.9"
+python-jose = "^3.3.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
