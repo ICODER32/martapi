@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "product-service"
+name = "notification-service"
 version = "0.1.0"
 description = ""
 authors = ["Ibtisam Anwar <ibtisamanwar008@gmail.com>"]
@@ -9,11 +9,8 @@ readme = "README.md"
 python = "^3.12"
 fastapi = "^0.111.0"
 uvicorn = {extras = ["standard"], version = "^0.30.1"}
-sqlmodel = "^0.0.19"
 aiokafka = "^0.10.0"
-protobuf = "5.27.0"
-psycopg2-binary = "^2.9.9"
-python-jose = "^3.3.0"
+protobuf = "^5.27.2"
 
 
 [build-system]

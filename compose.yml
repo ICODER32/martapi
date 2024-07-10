@@ -39,6 +39,19 @@ services:
     ports:
       - "8001:8000"
   
+  notification_service:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    container_name: notification_service
+    hostname: notification_service
+    volumes:
+      - ./notification_service:/app/
+    depends_on:
+      - kafka-ui
+      - broker
+    ports:
+      - "8004:8000"
 
   user_service:
     build:

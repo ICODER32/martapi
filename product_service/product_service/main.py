@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI,Depends
+from fastapi import FastAPI,Depends,HTTPException
 from contextlib import asynccontextmanager
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka import AIOKafkaProducer,AIOKafkaConsumer
@@ -12,11 +12,11 @@ from sqlmodel import Session
 MAX_RETRIES = 5
 import uuid
 RETRY_INTERVAL = 10  # seconds
-
 from product_service.db import Product,create_db_and_tables,engine,ProductSchema
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+from jose import JWTError, jwt
 
 from sqlmodel import select
 
@@ -159,8 +159,13 @@ async def consume():
 
     except KafkaError as e:
         logger.error(f"Error while consuming message: {e}")
-
-
+async def authorize(token: str ):
+    try:
+        payload = jwt.decode(token, "secret", algorithms=["HS256"])
+        logger.info(f"Authorized user {payload}")
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
@@ -182,17 +187,27 @@ app = FastAPI(lifespan=lifespan)
 class ProductUpdate(Product):
     id: int
 @app.get("/")
-def read_root(session:Session=Depends(get_session)):
-    products=session.exec(select(Product)).all()
-    return {
-        "products": products
-    }
-    
+async def read_root(token: str, session: Session = Depends(get_session)):
+    logger.info(f"Token: {token}")
+    try:
+        isAuthorized = jwt.decode(token, "secret2", algorithms=["HS256"])
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if isAuthorized.get("role") == "admin":
+        products = session.exec(select(Product)).all()
+        return {
+            "products": products
+        }
+    else:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 @app.post("/products/")
-async def create_product(product:ProductSchema
+async def create_product(token:str,product:ProductSchema
                          ,producer: Annotated[AIOKafkaProducer,Depends(get_kafka_producer)]):
-
+    isAuthorized= jwt.decode(token, "secret", algorithms=["HS256"])
+    if isAuthorized.get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Unauthorized")
     product_message = product_pb2.Product()
     product_message.name = product.name
     product_message.description = product.description
@@ -207,7 +222,11 @@ async def create_product(product:ProductSchema
     return {"product": "created"}
 
 @app.delete("/products/")
-async def delete_product(product_id: str, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+async def delete_product(token:str,product_id: str, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+    isAuthorized = jwt.decode(token, "secret", algorithms=["HS256"])
+    if isAuthorized.get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
     product_message = product_pb2.Product()
     # convert the product_id to int
     product_message.id = int(product_id)
@@ -217,7 +236,10 @@ async def delete_product(product_id: str, producer: Annotated[AIOKafkaProducer, 
 
 
 @app.put("/products/")
-async def update_product(product_id:int, product: ProductSchema, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+async def update_product(token:str,product_id:int, product: ProductSchema, producer: Annotated[AIOKafkaProducer, Depends(get_kafka_producer)]):
+    isAuthorized= jwt.decode(token, "secret", algorithms=["HS256"])
+    if isAuthorized.get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Unauthorized")
     product_message = product_pb2.Product()
     product_message.id = product_id
     product_message.name = product.name
